@@ -56,3 +56,7 @@ docs/_build/
 
 # PyBuilder
 target/
+
+OLHWDB1.1trn_pot/
+OLHWDB1.1trn_pot_decode/
+\.idea/
