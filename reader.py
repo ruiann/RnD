@@ -58,7 +58,7 @@ def init():
             buckets[bucket_index].append(data)
         index = index + 1
     for i in range(bucket_num):
-        np.savetxt(os.path.join(target_dir, '{}.txt'.format(i)))
+        np.savetxt(os.path.join(target_dir, '{}.txt'.format(i)), buckets[i])
     return buckets, index
 
 
