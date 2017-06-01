@@ -4,25 +4,25 @@ from __future__ import print_function
 
 import tensorflow as tf
 from LogisticRegression import LogisticRegression
-from BidirectionalLSTM import BidirectionalLSTM
+from BidirectionalRNN import BidirectionalRNN
 
 
 class Encoder:
 
-    def __init__(self, lstm=[100, 500], class_num=10):
-        self.bidirectional_LSTM = BidirectionalLSTM('BidirectionalLSTM', lstm, stack=2)
-        self.logistic_regression = LogisticRegression('LogisticRegression', lstm[-1], [800, class_num])
+    def __init__(self, rnn_size=[100, 500], class_num=10):
+        self.bidirectional_rnn = BidirectionalRNN('BidirectionalRNN', rnn_size)
+        self.logistic_regression = LogisticRegression('LogisticRegression', rnn_size[-1], [800, class_num])
 
     # do classification
     def run(self, data):
-        lstm_code = self.lstm(data)
-        return self.regression(lstm_code)
+        rnn_code = self.rnn(data)
+        return self.regression(rnn_code)
 
-    def lstm(self, data):
-        return self.bidirectional_LSTM.run(data, reuse=False, time_major=False)
+    def rnn(self, data):
+        return self.bidirectional_rnn.run(data, reuse=False, time_major=False)
 
-    def regression(self, lstm_code):
-        return tf.nn.relu(self.logistic_regression.run(lstm_code)[-1])
+    def regression(self, rnn_code):
+        return self.logistic_regression.run(rnn_code)
 
     # compute loss
     def loss(self, logits, labels):

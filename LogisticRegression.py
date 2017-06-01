@@ -20,7 +20,6 @@ class LogisticRegression:
 
     def run(self, x):
         out = x
-        output = []
         for i in range(len(self.layer)):
             if i == 0:
                 W, b = self.full_connection_layer(i, self.input_dimension, self.layer[i])
@@ -30,5 +29,4 @@ class LogisticRegression:
             if i != len(self.layer) - 1:
                 out = tf.nn.relu(out)
             tf.summary.histogram('regression_result_layer {}'.format(i + 1), out)
-            output.append(out)
-        return output
+        return out
