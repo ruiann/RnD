@@ -87,4 +87,5 @@ def read():
 
 
 if __name__ == '__main__':
-    read()
+    init()
+    data_buckets, label_buckets = read()
