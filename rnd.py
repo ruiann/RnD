@@ -37,5 +37,5 @@ class RnD:
 
             tf.summary.histogram('classification', logit)
 
-        self.encoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
+        self.encoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
         return logit

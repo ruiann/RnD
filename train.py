@@ -69,8 +69,8 @@ def train():
             summary_writer.add_summary(summary_str, step)
 
             if step % 10000 == 0 and step != 0:
-                checkpoint_file = os.path.join(model_dir, 'model.latest')
-                saver.save(sess, checkpoint_file)
+                checkpoint_file = os.path.join(model_dir, 'model')
+                saver.save(sess, checkpoint_file, step)
                 summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
 
             sess.run(update_global_step)
