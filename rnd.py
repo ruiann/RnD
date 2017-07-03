@@ -5,6 +5,7 @@ from __future__ import print_function
 from layer import *
 from tensorflow.contrib import rnn
 import math
+import pdb
 
 
 class RnD:
@@ -19,6 +20,7 @@ class RnD:
         with tf.variable_scope('encoder', reuse=reuse):
             forward_cell = rnn.MultiRNNCell([rnn.GRUCell(rnn_size[i]) for i in range(len(rnn_size))])
             backward_cell = rnn.MultiRNNCell([rnn.GRUCell(rnn_size[i]) for i in range(len(rnn_size))])
+            pdb.set_trace()
             output, state = tf.nn.bidirectional_dynamic_rnn(forward_cell, backward_cell, x, dtype=self.data_type, time_major=time_major)
             forward_output, backward_output = output
 
@@ -34,9 +36,11 @@ class RnD:
 
             code = (forward_output + backward_output) / 2
             with tf.variable_scope('encoder_classification'):
-                code = full_connection_layer(code, 200)
-                code = tf.nn.relu(code)
-                logit = full_connection_layer(code, self.label)
+                with tf.variable_scope('layer1'):
+                    code = full_connection_layer(code, 200)
+                    code = tf.nn.relu(code)
+                with tf.variable_scope('layer2'):
+                    logit = full_connection_layer(code, self.label)
 
             tf.summary.histogram('classification', logit)
 
