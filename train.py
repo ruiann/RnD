@@ -65,7 +65,7 @@ def train_recognizer():
         while step < loop:
             print('step: %d' % step)
             bucket_index, x_batch, label_batch = feed_dict(batch_size)
-            summary_str, loss_value = sess.run([summary, loss, train_op], feed_dict={x: x_batch, label: label_batch})
+            summary_str, loss_value, _ = sess.run([summary, loss, train_op], feed_dict={x: x_batch, label: label_batch})
             summary_writer.add_summary(summary_str, step)
             print('bucket: {}'.format(bucket_index))
             print('loss: {}'.format(loss_value))
