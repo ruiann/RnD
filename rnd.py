@@ -5,7 +5,6 @@ from __future__ import print_function
 from layer import *
 from tensorflow.contrib import rnn
 import math
-import pdb
 
 
 class RnD:
@@ -20,7 +19,6 @@ class RnD:
         with tf.variable_scope('encoder', reuse=reuse):
             forward_cell = rnn.MultiRNNCell([rnn.GRUCell(rnn_size[i]) for i in range(len(rnn_size))])
             backward_cell = rnn.MultiRNNCell([rnn.GRUCell(rnn_size[i]) for i in range(len(rnn_size))])
-            pdb.set_trace()
             output, state = tf.nn.bidirectional_dynamic_rnn(forward_cell, backward_cell, x, dtype=self.data_type, time_major=time_major)
             forward_output, backward_output = output
 
