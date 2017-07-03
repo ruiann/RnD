@@ -9,7 +9,7 @@ import random
 
 rate = 0.0001
 loop = 1000000
-batch_size = 64
+batch_size = 512
 log_dir = './log'
 model_dir = './model'
 
@@ -65,8 +65,10 @@ def train_recognizer():
         while step < loop:
             print('step: %d' % step)
             bucket_index, x_batch, label_batch = feed_dict(batch_size)
-            summary_str, loss = sess.run([summary, train_op], feed_dict={x: x_batch, label: label_batch})
+            summary_str, loss_value = sess.run([summary, loss, train_op], feed_dict={x: x_batch, label: label_batch})
             summary_writer.add_summary(summary_str, step)
+            print('bucket: {}'.format(bucket_index))
+            print('loss: {}'.format(loss_value))
 
             if step % 10000 == 0 and step != 0:
                 checkpoint_file = os.path.join(model_dir, 'model')
