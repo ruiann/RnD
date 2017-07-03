@@ -31,7 +31,7 @@ def feed_dict(batch_size):
     return bucket_index, x_feed, label_feed
 
 
-def train():
+def train_recognizer():
     x = tf.placeholder(tf.float32, [batch_size, None, 5])
     label = tf.placeholder(tf.int32, [batch_size])
     model = RnD(batch_size=batch_size)
@@ -79,4 +79,4 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    train_recognizer()
