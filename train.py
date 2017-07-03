@@ -74,6 +74,7 @@ def train_recognizer():
                 summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
 
             sess.run(update_global_step)
+            step = global_step.eval()
 
         summary_writer.close()
 
