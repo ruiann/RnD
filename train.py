@@ -42,7 +42,7 @@ def train_recognizer():
         global_step = tf.Variable(0, name='global_step')
         update_global_step = tf.assign(global_step, global_step + 1)
 
-        logits = model.rnn_encode(x)
+        logits = model.classification(model.rnn_encode(x))
         classification = tf.to_int32(tf.arg_max(tf.nn.softmax(logits), dimension=1))
         differ = label - classification
         tf.summary.histogram('classification difference', differ)

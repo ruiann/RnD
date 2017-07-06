@@ -34,16 +34,19 @@ class RnD:
             tf.summary.histogram('backward_rnn_output', backward_output)
 
             code = (forward_output + backward_output) / 2
-            with tf.variable_scope('encoder_classification'):
-                with tf.variable_scope('layer1'):
-                    code = full_connection_layer(code, 200)
-                    code = tf.nn.relu(code)
-                with tf.variable_scope('layer2'):
-                    logit = full_connection_layer(code, self.label)
-
-            tf.summary.histogram('classification', logit)
 
         self.encoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
+        return code
+
+    def classification(self, code):
+        with tf.variable_scope('encoder_classification'):
+            with tf.variable_scope('layer1'):
+                code = full_connection_layer(code, 200)
+                code = tf.nn.relu(code)
+            with tf.variable_scope('layer2'):
+                logit = full_connection_layer(code, self.label)
+
+        tf.summary.histogram('classification', logit)
         return logit
 
     def rnn_decode_step(self, code, x, state, k=20, reuse=False):
