@@ -62,6 +62,7 @@ OLHWDB1.1trn_pot_decode/
 OLHWDB1.1tst_pot/
 OLHWDB1.1tst_pot_decode/
 data/
+test/
 \.idea/
 
 r_log/
