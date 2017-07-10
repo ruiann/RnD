@@ -7,11 +7,36 @@ from tensorflow.contrib import rnn
 import math
 
 
+def normal(y, mu, sigma):
+    result = tf.subtract(y, mu)
+    result = tf.multiply(result, tf.inv(sigma))
+    result = -tf.square(result) / 2
+    return tf.multiply(tf.exp(result), tf.inv(sigma)) / math.sqrt(2 * math.pi)
+
+
+def get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y):
+    x, y = tf.split(d, num_or_size_splits=2, axis=1)
+    result_x = normal(x, out_mu_x, out_sigma_x)
+    result_x = tf.multiply(result_x, out_pi)
+    result_x = tf.reduce_sum(result_x, 1, keep_dims=True)
+    result_x = -tf.log(result_x)
+    result_y = normal(y, out_mu_y, out_sigma_y)
+    result_y = tf.multiply(result_y, out_pi)
+    result_y = tf.reduce_sum(result_y, 1, keep_dims=True)
+    result_y = -tf.log(result_y)
+    return tf.reduce_mean(result_x + result_y)
+
+
+def get_loss_func_s(logits, targets):
+    return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=targets, logits=logits, pos_weight=[1, 5, 100]))
+
+
 class RnD:
-    def __init__(self, batch_size=32, data_type=tf.float32, label=3755):
+    def __init__(self, batch_size=32, k=20, data_type=tf.float32, label=3755):
         self.batch_size = batch_size
         self.data_type = data_type
         self.label = label
+        self.k = k
 
     def rnn_encode(self, x, reuse=False, time_major=False, pooling='mean'):
         rnn_size = [100, 500]
@@ -44,27 +69,32 @@ class RnD:
                 code = full_connection_layer(code, 200)
                 code = tf.nn.relu(code)
             with tf.variable_scope('layer2'):
-                logit = full_connection_layer(code, self.label)
+                code = full_connection_layer(code, self.label)
 
-        tf.summary.histogram('classification', logit)
-        return logit
+        tf.summary.histogram('classification', code)
+        return code
 
-    def rnn_decode_step(self, code, x, state, k=20, reuse=False):
-        STDEV = 0.5
+    def rnn_decode_step(self, code, d, s, state, reuse=False):
+        stddev = 0.5
         rnn_size = [500]
         with tf.variable_scope('decoder', reuse=reuse):
-            Wx = tf.Variable(tf.random_normal([5, 500], stddev=STDEV, dtype=tf.float32))
-            bx = tf.Variable(tf.random_normal([5, 500], stddev=STDEV, dtype=tf.float32))
-            x = (tf.nn.tanh(tf.matmul(x, Wx) + bx) + code) / 2
+            Wd = tf.Variable(tf.random_normal([2, 500], stddev=stddev, dtype=tf.float32))
+            bd = tf.Variable(tf.random_normal([2, 500], stddev=stddev, dtype=tf.float32))
+            Ws = tf.Variable(tf.random_normal([3, 500], stddev=stddev, dtype=tf.float32))
+            bs = tf.Variable(tf.random_normal([3, 500], stddev=stddev, dtype=tf.float32))
+            x = (tf.nn.tanh(tf.matmul(d, Wd) + bd) + tf.nn.tanh(tf.matmul(s, Ws) + bs) + code) / 2
 
             cell = rnn.MultiRNNCell([rnn.GRUCell(rnn_size[i]) for i in range(len(rnn_size))])
             output, state = cell(x, state)
 
-            Wh = tf.Variable(tf.random_normal([rnn_size[-1], 5 * k], stddev=STDEV, dtype=tf.float32))
-            bh = tf.Variable(tf.random_normal([rnn_size[-1], 5 * k], stddev=STDEV, dtype=tf.float32))
+            Wh = tf.Variable(tf.random_normal([rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
+            bh = tf.Variable(tf.random_normal([rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
             output = tf.nn.tanh(tf.matmul(output, Wh) + bh)
+            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(output, num_or_size_splits=5, axis=1)
 
-            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(1, 5, output)
+            Wst = tf.Variable(tf.random_normal([rnn_size[-1], 3], stddev=stddev, dtype=tf.float32))
+            bst = tf.Variable(tf.random_normal([rnn_size[-1], 3], stddev=stddev, dtype=tf.float32))
+            status = tf.matmul(output, Wst) + bst
 
             max_pi = tf.reduce_max(out_pi, 1, keep_dims=True)
             out_pi = tf.subtract(out_pi, max_pi)
@@ -74,22 +104,6 @@ class RnD:
 
             out_sigma_x = tf.exp(out_sigma_x)
             out_sigma_y = tf.exp(out_sigma_y)
+        self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
 
-        return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y
-
-    def tf_normal(self, y, mu, sigma):
-        result = tf.subtract(y, mu)
-        result = tf.multiply(result, tf.inv(sigma))
-        result = -tf.square(result) / 2
-        return tf.multiply(tf.exp(result), tf.inv(sigma)) / math.sqrt(2 * math.pi)
-
-    def get_lossfunc(self, x, y, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y):
-        result_x = self.tf_normal(x, out_mu_x, out_sigma_x)
-        result_x = tf.multiply(result_x, out_pi)
-        result_x = tf.reduce_sum(result_x, 1, keep_dims=True)
-        result_x = -tf.log(result_x)
-        result_y = self.tf_normal(y, out_mu_y, out_sigma_y)
-        result_y = tf.multiply(result_y, out_pi)
-        result_y = tf.reduce_sum(result_y, 1, keep_dims=True)
-        result_y = -tf.log(result_y)
-        return tf.reduce_mean(result_x + result_y)
+        return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state

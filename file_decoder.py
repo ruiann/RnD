@@ -56,3 +56,5 @@ def decode(path, target_path, writer):
 if __name__ == '__main__':
     for w in range(1001, 1241):
         decode('./OLHWDB1.1trn_pot/', './OLHWDB1.1trn_pot_decode/', w)
+    for w in range(1241, 1301):
+        decode('./OLHWDB1.1tst_pot/', './OLHWDB1.1tst_pot_decode/', w)

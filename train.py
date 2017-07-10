@@ -3,17 +3,19 @@ from __future__ import division
 from __future__ import print_function
 
 from reader import *
-from rnd import RnD
+from rnd import *
 import tensorflow as tf
 import random
 
 rate = 0.0001
 loop = 1000000
 batch_size = 512
-log_dir = './log'
-model_dir = './model'
+r_log_dir = './r_log'
+r_model_dir = './r_model'
+d_log_dir = './d_log'
+d_model_dir = './d_model'
 
-data_buckets, label_buckets = read()
+data_buckets, label_buckets = read_data()
 
 
 def feed_dict(batch_size):
@@ -52,12 +54,12 @@ def train_recognizer():
 
         sess.run(tf.global_variables_initializer())
         saver = tf.train.Saver()
-        ckpt = tf.train.get_checkpoint_state(model_dir)
+        ckpt = tf.train.get_checkpoint_state(r_model_dir)
         if ckpt:
             saver = tf.train.Saver()
             saver.restore(sess, ckpt.model_checkpoint_path)
 
-        summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
+        summary_writer = tf.summary.FileWriter(r_log_dir, sess.graph)
         summary = tf.summary.merge_all()
         run_metadata = tf.RunMetadata()
 
@@ -71,7 +73,82 @@ def train_recognizer():
             print('loss: {}'.format(loss_value))
 
             if step % 10000 == 0 and step != 0:
-                checkpoint_file = os.path.join(model_dir, 'model')
+                checkpoint_file = os.path.join(r_model_dir, 'model')
+                saver.save(sess, checkpoint_file, step)
+                summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
+
+            sess.run(update_global_step)
+            step = global_step.eval()
+
+        summary_writer.close()
+
+
+def train_drawer():
+    model = RnD(batch_size=batch_size)
+
+    x = tf.placeholder(tf.float32, [batch_size, None, 5])
+    coding = model.rnn_encode(x)
+
+    code = tf.placeholder(tf.int32, [batch_size, 500])
+    state = tf.placeholder(tf.int32, [batch_size, 500])
+    d_prev = tf.placeholder(tf.int32, [batch_size, 2])
+    s_prev = tf.placeholder(tf.int32, [batch_size, 3])
+    d = tf.placeholder(tf.int32, [batch_size, 2])
+    s = tf.placeholder(tf.int32, [batch_size, 3])
+
+    out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, rnn_state = model.rnn_decode_step(code, d_prev, s_prev, state)
+    loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
+    loss_s = get_loss_func_s(status, s)
+    loss = (loss_d + loss_s) / 2
+    train_op = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss, var_list=model.decoder_variables)
+
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+    with sess.as_default():
+        global_step = tf.Variable(0, name='global_step')
+        update_global_step = tf.assign(global_step, global_step + 1)
+
+        sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        recognizer_ckpt = tf.train.get_checkpoint_state(r_model_dir)
+        if recognizer_ckpt:
+            saver = tf.train.Saver()
+            saver.restore(sess, recognizer_ckpt.model_checkpoint_path)
+
+        summary_writer = tf.summary.FileWriter(d_log_dir, sess.graph)
+        summary = tf.summary.merge_all()
+        run_metadata = tf.RunMetadata()
+
+        step = global_step.eval()
+        while step < loop:
+            print('step: %d' % step)
+            bucket_index, x_batch, _ = feed_dict(batch_size)
+            print('bucket: {}'.format(bucket_index))
+            code_value = sess.run(coding, feed_dict={x: x_batch})
+            rnn_state_value = np.zeros([batch_size, 500], np.float32)
+            for i in range(bucket_gap * bucket_index + bucket_gap):
+                if i == 0:
+                    prev_d = [0, 0]
+                    prev_s = [1, 0, 0]
+                else:
+                    prev_d = x_batch[:, i - 1, 0 : 1]
+                    prev_s = x_batch[:, i - 1, 2 : 4]
+                d_value = x_batch[:, i, 0 : 1]
+                s_value = x_batch[:, i, 2: 4]
+
+                rnn_state_value, summary_str, loss_value, _ = sess.run([rnn_state, summary, loss, train_op], feed_dict={
+                    code: code_value,
+                    state: rnn_state_value,
+                    d_prev: prev_d,
+                    s_prev: prev_s,
+                    d: d_value,
+                    s: s_value
+                })
+                summary_writer.add_summary(summary_str, step)
+                print('loss: {}'.format(loss_value))
+
+            if step % 1000 == 0 and step != 0:
+                checkpoint_file = os.path.join(d_model_dir, 'model')
                 saver.save(sess, checkpoint_file, step)
                 summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
 

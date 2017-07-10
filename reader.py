@@ -7,7 +7,9 @@ import os
 import json
 
 data_dir = './OLHWDB1.1trn_pot_decode'
-target_dir = './data'
+test_dir = './OLHWDB1.1tst_pot_decode'
+data_target_dir = './data'
+test_target_dir = './test'
 bucket_gap = 10
 bucket_num = 10
 
@@ -54,12 +56,12 @@ def init_bucket():
     return data
 
 
-def init():
+def init_data(dir, target_dir):
     data_buckets = init_bucket()
     label_buckets = init_bucket()
     index = 0
-    for label in os.listdir(data_dir):
-        label_dir = os.path.join(data_dir, label)
+    for label in os.listdir(dir):
+        label_dir = os.path.join(dir, label)
         for writer in os.listdir(label_dir):
             data, bucket_index = read_file(os.path.join(label_dir, writer))
             label_buckets[bucket_index].append(index)
@@ -73,19 +75,27 @@ def init():
     return data_buckets, label_buckets, index
 
 
-def read():
+def read(dir):
     data_buckets = []
     label_buckets = []
     for i in range(bucket_num):
-        with open('{}/data_bucket_{}.json'.format(target_dir, i)) as json_file:
+        with open('{}/data_bucket_{}.json'.format(dir, i)) as json_file:
             data = json.load(json_file)
             data_buckets.append(data)
-        with open('{}/label_bucket_{}.json'.format(target_dir, i)) as json_file:
+        with open('{}/label_bucket_{}.json'.format(dir, i)) as json_file:
             label = json.load(json_file)
             label_buckets.append(label)
     return data_buckets, label_buckets
 
 
+def read_data():
+    return read(data_target_dir)
+
+
+def read_test():
+    return read(test_target_dir)
+
+
 if __name__ == '__main__':
-    init()
-    data_buckets, label_buckets = read()
+    init_data(data_dir, data_target_dir)
+    init_data(test_dir, test_target_dir)
