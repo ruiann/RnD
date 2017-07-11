@@ -8,7 +8,7 @@ import tensorflow as tf
 import random
 
 rate = 0.0001
-loop = 1000000
+loop = 500000
 batch_size = 512
 r_log_dir = './r_log'
 r_model_dir = './r_model'
@@ -56,7 +56,6 @@ def train_recognizer():
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(r_model_dir)
         if ckpt:
-            saver = tf.train.Saver()
             saver.restore(sess, ckpt.model_checkpoint_path)
 
         summary_writer = tf.summary.FileWriter(r_log_dir, sess.graph)
@@ -89,12 +88,12 @@ def train_drawer():
     x = tf.placeholder(tf.float32, [batch_size, None, 5])
     coding = model.rnn_encode(x)
 
-    code = tf.placeholder(tf.int32, [batch_size, 500])
-    state = tf.placeholder(tf.int32, [batch_size, 500])
-    d_prev = tf.placeholder(tf.int32, [batch_size, 2])
-    s_prev = tf.placeholder(tf.int32, [batch_size, 3])
-    d = tf.placeholder(tf.int32, [batch_size, 2])
-    s = tf.placeholder(tf.int32, [batch_size, 3])
+    code = tf.placeholder(tf.float32, [batch_size, 500])
+    state = [tf.placeholder(tf.float32, [batch_size, 500])]
+    d_prev = tf.placeholder(tf.float32, [batch_size, 2])
+    s_prev = tf.placeholder(tf.float32, [batch_size, 3])
+    d = tf.placeholder(tf.float32, [batch_size, 2])
+    s = tf.placeholder(tf.float32, [batch_size, 3])
 
     out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, rnn_state = model.rnn_decode_step(code, d_prev, s_prev, state)
     loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
@@ -111,9 +110,11 @@ def train_drawer():
         sess.run(tf.global_variables_initializer())
         saver = tf.train.Saver()
         recognizer_ckpt = tf.train.get_checkpoint_state(r_model_dir)
+        drawer_ckpt = tf.train.get_checkpoint_state(d_model_dir)
         if recognizer_ckpt:
-            saver = tf.train.Saver()
             saver.restore(sess, recognizer_ckpt.model_checkpoint_path)
+        if drawer_ckpt:
+            saver.restore(sess, drawer_ckpt.model_checkpoint_path)
 
         summary_writer = tf.summary.FileWriter(d_log_dir, sess.graph)
         summary = tf.summary.merge_all()
@@ -125,15 +126,15 @@ def train_drawer():
             bucket_index, x_batch, _ = feed_dict(batch_size)
             print('bucket: {}'.format(bucket_index))
             code_value = sess.run(coding, feed_dict={x: x_batch})
-            rnn_state_value = np.zeros([batch_size, 500], np.float32)
+            rnn_state_value = [np.zeros([batch_size, 500], np.float32)]
             for i in range(bucket_gap * bucket_index + bucket_gap):
                 if i == 0:
                     prev_d = [0, 0]
-                    prev_s = [1, 0, 0]
+                    prev_s = [0, 0, 0]
                 else:
-                    prev_d = x_batch[:, i - 1, 0 : 1]
-                    prev_s = x_batch[:, i - 1, 2 : 4]
-                d_value = x_batch[:, i, 0 : 1]
+                    prev_d = x_batch[:, i - 1, 0: 1]
+                    prev_s = x_batch[:, i - 1, 2: 4]
+                d_value = x_batch[:, i, 0: 1]
                 s_value = x_batch[:, i, 2: 4]
 
                 rnn_state_value, summary_str, loss_value, _ = sess.run([rnn_state, summary, loss, train_op], feed_dict={
@@ -160,3 +161,4 @@ def train_drawer():
 
 if __name__ == '__main__':
     train_recognizer()
+    train_drawer()
