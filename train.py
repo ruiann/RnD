@@ -6,6 +6,7 @@ from reader import *
 from rnd import *
 import tensorflow as tf
 import random
+import pdb
 
 rate = 0.0001
 loop = 500000
@@ -30,7 +31,8 @@ def feed_dict(batch_size):
         label = label_bucket[index]
         x_feed.append(data)
         label_feed.append(label)
-    return bucket_index, x_feed, label_feed
+    pdb.set_trace()
+    return bucket_index, np.array(x_feed, np.float32), np.array(label_feed, np.int32)
 
 
 def train_recognizer():
@@ -133,8 +135,8 @@ def train_drawer():
                     prev_d = [0, 0]
                     prev_s = [0, 0, 0]
                 else:
-                    prev_d = x_batch[:, i - 1, 0: 1]
-                    prev_s = x_batch[:, i - 1, 2: 4]
+                    prev_d = x_batch[:, i - 1, 0: 2]
+                    prev_s = x_batch[:, i - 1, 2: 5]
                 d_value = x_batch[:, i, 0: 1]
                 s_value = x_batch[:, i, 2: 4]
 
