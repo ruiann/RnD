@@ -86,7 +86,7 @@ def train_drawer():
     model = RnD(batch_size=batch_size)
 
     x = tf.placeholder(tf.float32, [batch_size, None, 5])
-    coding = model.rnn_encode(x)
+    coding = model.rnn_encode(x, reuse=True)
 
     code = tf.placeholder(tf.float32, [batch_size, 500])
     state = [tf.placeholder(tf.float32, [batch_size, 500])]
@@ -108,13 +108,14 @@ def train_drawer():
         update_global_step = tf.assign(global_step, global_step + 1)
 
         sess.run(tf.global_variables_initializer())
-        saver = tf.train.Saver()
-        recognizer_ckpt = tf.train.get_checkpoint_state(r_model_dir)
-        drawer_ckpt = tf.train.get_checkpoint_state(d_model_dir)
-        if recognizer_ckpt:
-            saver.restore(sess, recognizer_ckpt.model_checkpoint_path)
-        if drawer_ckpt:
-            saver.restore(sess, drawer_ckpt.model_checkpoint_path)
+        r_saver = tf.train.Saver(model.encoder_variables)
+        d_saver = tf.train.Saver(model.decoder_variables)
+        r_ckpt = tf.train.get_checkpoint_state(r_model_dir)
+        d_ckpt = tf.train.get_checkpoint_state(d_model_dir)
+        if r_ckpt:
+            r_saver.restore(sess, r_ckpt.model_checkpoint_path)
+        if d_ckpt:
+            d_saver.restore(sess, d_ckpt.model_checkpoint_path)
 
         summary_writer = tf.summary.FileWriter(d_log_dir, sess.graph)
         summary = tf.summary.merge_all()
@@ -150,7 +151,7 @@ def train_drawer():
 
             if step % 1000 == 0 and step != 0:
                 checkpoint_file = os.path.join(d_model_dir, 'model')
-                saver.save(sess, checkpoint_file, step)
+                d_saver.save(sess, checkpoint_file, step)
                 summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
 
             sess.run(update_global_step)
