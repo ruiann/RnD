@@ -16,15 +16,14 @@ def normal(y, mu, sigma):
 
 def get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y):
     x, y = tf.split(d, num_or_size_splits=2, axis=1)
-    result_x = normal(x, out_mu_x, out_sigma_x)
-    result_x = tf.multiply(result_x, out_pi)
-    result_x = tf.reduce_sum(result_x, 1, keep_dims=True)
-    result_x = -tf.log(result_x)
-    result_y = normal(y, out_mu_y, out_sigma_y)
-    result_y = tf.multiply(result_y, out_pi)
-    result_y = tf.reduce_sum(result_y, 1, keep_dims=True)
-    result_y = -tf.log(result_y)
-    return tf.reduce_mean(result_x + result_y)
+    p_x = normal(x, out_mu_x, out_sigma_x)
+    p_y = normal(y, out_mu_y, out_sigma_y)
+    p = tf.multiply(p_x, p_y)
+    tf.summary.histogram('gmm_prob', p)
+    p = tf.multiply(p, out_pi)
+    result = tf.reduce_sum(p, 1, keep_dims=True)
+    result = -tf.log(result)
+    return tf.reduce_mean(result)
 
 
 def get_loss_func_s(logits, targets):
@@ -115,11 +114,11 @@ class RnD:
 
         if training:
             tf.summary.histogram('rnn_output', output)
-            tf.summary.histogram('pi', out_pi)
-            tf.summary.histogram('mu_x', out_mu_x)
-            tf.summary.histogram('sigma_x', out_sigma_x)
-            tf.summary.histogram('mu_y', out_mu_y)
-            tf.summary.histogram('sigma_y', out_sigma_y)
-            tf.summary.histogram('s', status)
+            tf.summary.histogram('gmm_pi', out_pi)
+            tf.summary.histogram('gmm_mu_x', out_mu_x)
+            tf.summary.histogram('gmm_sigma_x', out_sigma_x)
+            tf.summary.histogram('gmm_mu_y', out_mu_y)
+            tf.summary.histogram('gmm_sigma_y', out_sigma_y)
+            tf.summary.histogram('predict_s', status)
 
         return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state

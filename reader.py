@@ -11,7 +11,7 @@ test_dir = './OLHWDB1.1tst_pot_decode'
 data_target_dir = './data'
 test_target_dir = './test'
 bucket_gap = 10
-bucket_num = 10
+bucket_num = 1
 
 
 def pad(length, data):

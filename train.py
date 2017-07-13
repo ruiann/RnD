@@ -7,7 +7,7 @@ from rnd import *
 import tensorflow as tf
 import random
 
-rate = 0.0001
+rate = 0.001
 loop = 500000
 batch_size = 512
 r_log_dir = './r_log'
@@ -129,7 +129,7 @@ def train_drawer():
         index = char_loop.eval()
         step = global_step.eval()
         while index < loop:
-            print('step: %d' % step)
+            print('char: %d' % index)
             bucket_index, x_batch, _ = feed_dict(batch_size)
             print('bucket: {}'.format(bucket_index))
             code_value = sess.run(coding, feed_dict={x: x_batch})
