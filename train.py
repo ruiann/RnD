@@ -101,7 +101,7 @@ def train_drawer():
     loss = (loss_d + loss_s) / 2
     tf.summary.scalar('d_loss', loss_d)
     tf.summary.scalar('s_loss', loss_s)
-    tf.summary.scalar('s_loss', loss_s)
+    tf.summary.scalar('loss', loss)
     train_op = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss, var_list=model.decoder_variables)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
