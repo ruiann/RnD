@@ -41,6 +41,9 @@ class RnD:
         self.encoder_rnn_size = encoder_rnn_size
         self.decoder_rnn_size = decoder_rnn_size
 
+        self.encoder_variables = []
+        self.decoder_variables = []
+
     def rnn_encode(self, x, reuse=False, time_major=False, pooling='mean', training=True):
         time_axis = 0 if time_major else 1
         with tf.variable_scope('encoder', reuse=reuse):
@@ -97,8 +100,8 @@ class RnD:
 
             Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
             bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32))
-            output = tf.nn.tanh(tf.matmul(output, Wh) + bh)
-            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(output, num_or_size_splits=5, axis=1)
+            gmm = tf.nn.tanh(tf.matmul(output, Wh) + bh)
+            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(gmm, num_or_size_splits=5, axis=1)
 
             max_pi = tf.reduce_max(out_pi, 1, keep_dims=True)
             out_pi = tf.subtract(out_pi, max_pi)
@@ -111,10 +114,12 @@ class RnD:
         self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
 
         if training:
+            tf.summary.histogram('rnn_output', output)
             tf.summary.histogram('pi', out_pi)
             tf.summary.histogram('mu_x', out_mu_x)
             tf.summary.histogram('sigma_x', out_sigma_x)
             tf.summary.histogram('mu_y', out_mu_y)
             tf.summary.histogram('sigma_y', out_sigma_y)
+            tf.summary.histogram('s', status)
 
         return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state

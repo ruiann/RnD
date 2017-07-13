@@ -107,6 +107,8 @@ def train_drawer():
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
     with sess.as_default():
+        char_loop = tf.Variable(0, name='char')
+        update_char = tf.assign(char_loop, char_loop + 1)
         global_step = tf.Variable(0, name='global_step')
         update_global_step = tf.assign(global_step, global_step + 1)
 
@@ -124,8 +126,9 @@ def train_drawer():
         summary = tf.summary.merge_all()
         run_metadata = tf.RunMetadata()
 
+        index = char_loop.eval()
         step = global_step.eval()
-        while step < loop:
+        while index < loop:
             print('step: %d' % step)
             bucket_index, x_batch, _ = feed_dict(batch_size)
             print('bucket: {}'.format(bucket_index))
@@ -151,13 +154,16 @@ def train_drawer():
                 summary_writer.add_summary(summary_str, step)
                 print('loss: {}'.format(loss_value))
 
-            if step % 1000 == 0 and step != 0:
-                checkpoint_file = os.path.join(d_model_dir, 'model')
-                d_saver.save(sess, checkpoint_file, step)
-                summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
+                if step % 1000 == 0 and step != 0:
+                    checkpoint_file = os.path.join(d_model_dir, 'model')
+                    d_saver.save(sess, checkpoint_file, step)
+                    summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
 
-            sess.run(update_global_step)
-            step = global_step.eval()
+                sess.run(update_global_step)
+                step = global_step.eval()
+
+            sess.run(update_char)
+            index = char_loop.eval()
 
         summary_writer.close()
 
