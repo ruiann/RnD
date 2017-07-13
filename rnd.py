@@ -41,7 +41,7 @@ class RnD:
         self.encoder_rnn_size = encoder_rnn_size
         self.decoder_rnn_size = decoder_rnn_size
 
-    def rnn_encode(self, x, reuse=False, time_major=False, pooling='mean'):
+    def rnn_encode(self, x, reuse=False, time_major=False, pooling='mean', training=True):
         time_axis = 0 if time_major else 1
         with tf.variable_scope('encoder', reuse=reuse):
             forward_cell = rnn.MultiRNNCell([rnn.GRUCell(self.encoder_rnn_size[i]) for i in range(len(self.encoder_rnn_size))])
@@ -57,15 +57,16 @@ class RnD:
                 forward_output = forward_output[-1, :, :] if time_major else forward_output[:, -1, :]
                 backward_output = backward_output[-1, :, :] if time_major else backward_output[:, -1, :]
 
-            tf.summary.histogram('forward_rnn_output', forward_output)
-            tf.summary.histogram('backward_rnn_output', backward_output)
+            if training:
+                tf.summary.histogram('forward_rnn_output', forward_output)
+                tf.summary.histogram('backward_rnn_output', backward_output)
 
             code = (forward_output + backward_output) / 2
 
         self.encoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
         return code
 
-    def classification(self, code):
+    def classification(self, code, training=True):
         with tf.variable_scope('encoder_classification'):
             with tf.variable_scope('layer1'):
                 code = full_connection_layer(code, 200)
@@ -73,10 +74,11 @@ class RnD:
             with tf.variable_scope('layer2'):
                 code = full_connection_layer(code, self.label)
 
-        tf.summary.histogram('classification', code)
+        if training:
+            tf.summary.histogram('classification', code)
         return code
 
-    def rnn_decode_step(self, code, d, s, state, reuse=False):
+    def rnn_decode_step(self, code, d, s, state, reuse=False, training=True):
         stddev = 0.5
         with tf.variable_scope('decoder', reuse=reuse):
             Wd = tf.Variable(tf.random_normal([2, 500], stddev=stddev, dtype=tf.float32))
@@ -107,5 +109,12 @@ class RnD:
             out_sigma_x = tf.exp(out_sigma_x)
             out_sigma_y = tf.exp(out_sigma_y)
         self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
+
+        if training:
+            tf.summary.histogram('pi', out_pi)
+            tf.summary.histogram('mu_x', out_mu_x)
+            tf.summary.histogram('sigma_x', out_sigma_x)
+            tf.summary.histogram('mu_y', out_mu_y)
+            tf.summary.histogram('sigma_y', out_sigma_y)
 
         return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state

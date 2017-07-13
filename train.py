@@ -6,7 +6,6 @@ from reader import *
 from rnd import *
 import tensorflow as tf
 import random
-import pdb
 
 rate = 0.0001
 loop = 500000
@@ -31,7 +30,6 @@ def feed_dict(batch_size):
         label = label_bucket[index]
         x_feed.append(data)
         label_feed.append(label)
-    pdb.set_trace()
     return bucket_index, np.array(x_feed, np.float32), np.array(label_feed, np.int32)
 
 
@@ -87,17 +85,17 @@ def train_recognizer():
 def train_drawer():
     model = RnD(batch_size=batch_size)
 
-    x = tf.placeholder(tf.float32, [batch_size, None, 5])
-    coding = model.rnn_encode(x, reuse=True)
+    x = tf.placeholder(tf.float32, [batch_size, None, 5], 'x')
+    coding = model.rnn_encode(x, training=False)
 
-    code = tf.placeholder(tf.float32, [batch_size, 500])
-    state = [tf.placeholder(tf.float32, [batch_size, 500])]
-    d_prev = tf.placeholder(tf.float32, [batch_size, 2])
-    s_prev = tf.placeholder(tf.float32, [batch_size, 3])
-    d = tf.placeholder(tf.float32, [batch_size, 2])
-    s = tf.placeholder(tf.float32, [batch_size, 3])
+    code = tf.placeholder(tf.float32, [batch_size, 500], 'code')
+    state = tf.placeholder(tf.float32, [batch_size, 500], 'state')
+    d_prev = tf.placeholder(tf.float32, [batch_size, 2], 'prev_d')
+    s_prev = tf.placeholder(tf.float32, [batch_size, 3], 'prev_s')
+    d = tf.placeholder(tf.float32, [batch_size, 2], 'd')
+    s = tf.placeholder(tf.float32, [batch_size, 3], 's')
 
-    out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, rnn_state = model.rnn_decode_step(code, d_prev, s_prev, state)
+    out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, rnn_state = model.rnn_decode_step(code, d_prev, s_prev, [state])
     loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
     loss_s = get_loss_func_s(status, s)
     loss = (loss_d + loss_s) / 2
@@ -129,18 +127,17 @@ def train_drawer():
             bucket_index, x_batch, _ = feed_dict(batch_size)
             print('bucket: {}'.format(bucket_index))
             code_value = sess.run(coding, feed_dict={x: x_batch})
-            rnn_state_value = [np.zeros([batch_size, 500], np.float32)]
+            rnn_state_value = np.zeros([batch_size, 500], np.float32)
             for i in range(bucket_gap * bucket_index + bucket_gap):
                 if i == 0:
-                    prev_d = [0, 0]
-                    prev_s = [0, 0, 0]
+                    prev_d = np.zeros([batch_size, 2], np.float32)
+                    prev_s = np.zeros([batch_size, 3], np.float32)
                 else:
                     prev_d = x_batch[:, i - 1, 0: 2]
                     prev_s = x_batch[:, i - 1, 2: 5]
-                d_value = x_batch[:, i, 0: 1]
-                s_value = x_batch[:, i, 2: 4]
-
-                rnn_state_value, summary_str, loss_value, _ = sess.run([rnn_state, summary, loss, train_op], feed_dict={
+                d_value = x_batch[:, i, 0: 2]
+                s_value = x_batch[:, i, 2: 5]
+                [rnn_state_value], summary_str, loss_value, _ = sess.run([rnn_state, summary, loss, train_op], feed_dict={
                     code: code_value,
                     state: rnn_state_value,
                     d_prev: prev_d,
@@ -163,5 +160,5 @@ def train_drawer():
 
 
 if __name__ == '__main__':
-    train_recognizer()
+    # train_recognizer()
     train_drawer()
