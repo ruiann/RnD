@@ -99,6 +99,8 @@ def train_drawer():
     loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
     loss_s = get_loss_func_s(status, s)
     loss = (loss_d + loss_s) / 2
+    tf.summary.histogram('d_loss', loss_d)
+    tf.summary.histogram('s_loss', loss_s)
     train_op = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss, var_list=model.decoder_variables)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
