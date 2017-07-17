@@ -19,7 +19,6 @@ def get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y):
     p_x = normal(x, out_mu_x, out_sigma_x)
     p_y = normal(y, out_mu_y, out_sigma_y)
     p = tf.multiply(p_x, p_y)
-    tf.summary.histogram('gmm_prob', p)
     p = tf.multiply(p, out_pi)
     result = tf.reduce_sum(p, 1, keep_dims=True)
     result = -tf.log(result)
@@ -32,7 +31,7 @@ def get_loss_func_s(logits, targets):
 
 
 class RnD:
-    def __init__(self, batch_size=32, k=20, data_type=tf.float32, label=3755, encoder_rnn_size=[100, 500], decoder_rnn_size=[500]):
+    def __init__(self, batch_size=32, k=20, data_type=tf.float32, label=3755, encoder_rnn_size=[100, 500], decoder_rnn_size=[1000]):
         self.batch_size = batch_size
         self.data_type = data_type
         self.label = label
@@ -80,26 +79,33 @@ class RnD:
             tf.summary.histogram('classification', code)
         return code
 
-    def rnn_decode_step(self, code, d, s, state, reuse=False, training=True):
+    def init_decoder(self, reuse=False):
         stddev = 0.5
         with tf.variable_scope('decoder', reuse=reuse):
-            Wd = tf.Variable(tf.random_normal([2, 500], stddev=stddev, dtype=tf.float32))
-            bd = tf.Variable(tf.random_normal([500], stddev=stddev, dtype=tf.float32))
-            Ws = tf.Variable(tf.random_normal([3, 500], stddev=stddev, dtype=tf.float32))
-            bs = tf.Variable(tf.random_normal([500], stddev=stddev, dtype=tf.float32))
-            x = (tf.nn.tanh(tf.matmul(d, Wd) + bd) + tf.nn.tanh(tf.matmul(s, Ws) + bs) + code) / 2
+            self.Wd = tf.Variable(tf.random_normal([2, 300], stddev=stddev, dtype=tf.float32))
+            self.bd = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
+            self.Ws = tf.Variable(tf.random_normal([3, 300], stddev=stddev, dtype=tf.float32))
+            self.bs = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
+            self.Wc = tf.Variable(tf.random_normal([500, 300], stddev=stddev, dtype=tf.float32))
+            self.bc = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
 
-            cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
+            self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
 
-            output, state = cell(x, state)
+            self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32))
+            self.bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32))
 
-            Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32))
-            bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32))
-            status = tf.matmul(output, Wst) + bst
+            self.Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
+            self.bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32))
 
-            Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
-            bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32))
-            gmm = tf.nn.tanh(tf.matmul(output, Wh) + bh)
+        self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
+
+    def rnn_decode_step(self, code, d, s, state, reuse=False):
+        with tf.variable_scope('decoder', reuse=reuse):
+            x = tf.nn.tanh(tf.matmul(d, self.Wd) + self.bd) + tf.nn.tanh(tf.matmul(s, self.Ws) + self.bs) + tf.nn.tanh(tf.matmul(code, self.Wc) + self.bc)
+            output, state = self.cell(x, state)
+
+            status = tf.matmul(output, self.Wst) + self.bst
+            gmm = tf.nn.tanh(tf.matmul(output, self.Wh) + self.bh)
             out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(gmm, num_or_size_splits=5, axis=1)
 
             max_pi = tf.reduce_max(out_pi, 1, keep_dims=True)
@@ -110,15 +116,49 @@ class RnD:
 
             out_sigma_x = tf.exp(out_sigma_x)
             out_sigma_y = tf.exp(out_sigma_y)
-        self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
-
-        if training:
-            tf.summary.histogram('rnn_output', output)
-            tf.summary.histogram('gmm_pi', out_pi)
-            tf.summary.histogram('gmm_mu_x', out_mu_x)
-            tf.summary.histogram('gmm_sigma_x', out_sigma_x)
-            tf.summary.histogram('gmm_mu_y', out_mu_y)
-            tf.summary.histogram('gmm_sigma_y', out_sigma_y)
-            tf.summary.histogram('predict_s', status)
 
         return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state
+
+    def train(self, x):
+        length = tf.shape(x)[1]
+        coding = self.rnn_encode(x, training=False)
+        self.init_decoder()
+        i = tf.constant(0)
+        state = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
+        loss = tf.Variable(0, dtype=tf.float32)
+
+        default_prev_d = tf.zeros([self.batch_size, 2], tf.float32)
+        default_prev_s = tf.zeros([self.batch_size, 3], tf.float32)
+
+        def cond(i, *_):
+            return tf.less(i, length)
+
+        def body(i, state, loss):
+
+            def init_call():
+                prev_d = default_prev_d
+                prev_s = default_prev_s
+                return prev_d, prev_s
+
+            def normal_call():
+                prev_d = x[:, i - 1, 0: 2]
+                prev_s = x[:, i - 1, 2: 5]
+                return prev_d, prev_s
+
+            prev_d, prev_s = tf.cond(tf.equal(i, 0), lambda: init_call(), lambda: normal_call())
+            d = x[:, i, 0: 2]
+            s = x[:, i, 2: 5]
+
+            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, out_state = self.rnn_decode_step(coding, prev_d, prev_s, state)
+            loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
+            loss_s = get_loss_func_s(status, s)
+
+            loss = loss + loss_d + loss_s
+            i = tf.add(i, 1)
+            return i, out_state, loss
+
+        _, final_state, final_loss = tf.while_loop(cond=cond, body=body, loop_vars=(i, state, loss))
+
+        final_loss = tf.reduce_sum(tf.concat(final_loss, 1))
+        tf.summary.scalar('loss', final_loss)
+        return final_loss

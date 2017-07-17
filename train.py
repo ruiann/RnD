@@ -86,22 +86,7 @@ def train_drawer():
     model = RnD(batch_size=batch_size)
 
     x = tf.placeholder(tf.float32, [batch_size, None, 5], 'x')
-    coding = model.rnn_encode(x, training=False)
-
-    code = tf.placeholder(tf.float32, [batch_size, 500], 'code')
-    state = tf.placeholder(tf.float32, [batch_size, 500], 'state')
-    d_prev = tf.placeholder(tf.float32, [batch_size, 2], 'prev_d')
-    s_prev = tf.placeholder(tf.float32, [batch_size, 3], 'prev_s')
-    d = tf.placeholder(tf.float32, [batch_size, 2], 'd')
-    s = tf.placeholder(tf.float32, [batch_size, 3], 's')
-
-    out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, rnn_state = model.rnn_decode_step(code, d_prev, s_prev, [state])
-    loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
-    loss_s = get_loss_func_s(status, s)
-    loss = (loss_d + loss_s) / 2
-    tf.summary.scalar('d_loss', loss_d)
-    tf.summary.scalar('s_loss', loss_s)
-    tf.summary.scalar('loss', loss)
+    loss = model.train(x)
     train_op = tf.train.AdamOptimizer(learning_rate=rate).minimize(loss, var_list=model.decoder_variables)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
@@ -109,8 +94,6 @@ def train_drawer():
     with sess.as_default():
         char_loop = tf.Variable(0, name='char')
         update_char = tf.assign(char_loop, char_loop + 1)
-        global_step = tf.Variable(0, name='global_step')
-        update_global_step = tf.assign(global_step, global_step + 1)
 
         sess.run(tf.global_variables_initializer())
         r_saver = tf.train.Saver(model.encoder_variables)
@@ -127,40 +110,21 @@ def train_drawer():
         run_metadata = tf.RunMetadata()
 
         index = char_loop.eval()
-        step = global_step.eval()
         while index < loop:
             print('char: %d' % index)
             bucket_index, x_batch, _ = feed_dict(batch_size)
             print('bucket: {}'.format(bucket_index))
-            code_value = sess.run(coding, feed_dict={x: x_batch})
-            rnn_state_value = np.zeros([batch_size, 500], np.float32)
-            for i in range(bucket_gap * bucket_index + bucket_gap):
-                if i == 0:
-                    prev_d = np.zeros([batch_size, 2], np.float32)
-                    prev_s = np.zeros([batch_size, 3], np.float32)
-                else:
-                    prev_d = x_batch[:, i - 1, 0: 2]
-                    prev_s = x_batch[:, i - 1, 2: 5]
-                d_value = x_batch[:, i, 0: 2]
-                s_value = x_batch[:, i, 2: 5]
-                [rnn_state_value], summary_str, loss_value, _ = sess.run([rnn_state, summary, loss, train_op], feed_dict={
-                    code: code_value,
-                    state: rnn_state_value,
-                    d_prev: prev_d,
-                    s_prev: prev_s,
-                    d: d_value,
-                    s: s_value
-                })
-                summary_writer.add_summary(summary_str, step)
-                print('loss: {}'.format(loss_value))
 
-                if step % 1000 == 0 and step != 0:
-                    checkpoint_file = os.path.join(d_model_dir, 'model')
-                    d_saver.save(sess, checkpoint_file, step)
-                    summary_writer.add_run_metadata(run_metadata, 'step%03d' % step)
+            summary_str, loss_value, _ = sess.run([summary, loss, train_op], feed_dict={
+                x: x_batch
+            })
+            summary_writer.add_summary(summary_str, index)
+            print('loss: {}'.format(loss_value))
 
-                sess.run(update_global_step)
-                step = global_step.eval()
+            if index % 1000 == 0 and index != 0:
+                checkpoint_file = os.path.join(d_model_dir, 'model')
+                d_saver.save(sess, checkpoint_file, index)
+                summary_writer.add_run_metadata(run_metadata, 'step%03d' % index)
 
             sess.run(update_char)
             index = char_loop.eval()
