@@ -84,6 +84,7 @@ def train_recognizer():
 
 def train_drawer():
     model = RnD(batch_size=batch_size)
+    model.init_decoder()
 
     x = tf.placeholder(tf.float32, [batch_size, None, 5], 'x')
     loss = model.train(x)

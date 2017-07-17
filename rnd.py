@@ -82,20 +82,20 @@ class RnD:
     def init_decoder(self, reuse=False):
         stddev = 0.5
         with tf.variable_scope('decoder', reuse=reuse):
-            self.Wd = tf.Variable(tf.random_normal([2, 300], stddev=stddev, dtype=tf.float32))
-            self.bd = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
-            self.Ws = tf.Variable(tf.random_normal([3, 300], stddev=stddev, dtype=tf.float32))
-            self.bs = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
-            self.Wc = tf.Variable(tf.random_normal([500, 300], stddev=stddev, dtype=tf.float32))
-            self.bc = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32))
+            self.Wd = tf.Variable(tf.random_normal([2, 300], stddev=stddev, dtype=tf.float32), name='Wd')
+            self.bd = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bd')
+            self.Ws = tf.Variable(tf.random_normal([3, 300], stddev=stddev, dtype=tf.float32), name='Ws')
+            self.bs = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bs')
+            self.Wc = tf.Variable(tf.random_normal([500, 300], stddev=stddev, dtype=tf.float32), name='Wc')
+            self.bc = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bc')
 
             self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
 
-            self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32))
-            self.bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32))
+            self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32, name='Wst'))
+            self.bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32), name='bst')
 
-            self.Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32))
-            self.bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32))
+            self.Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32), name='Wh')
+            self.bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32), name='bh')
 
         self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
 
@@ -122,11 +122,10 @@ class RnD:
     def train(self, x):
         length = tf.shape(x)[1]
         coding = self.rnn_encode(x, training=False)
-        self.init_decoder()
+
         i = tf.constant(0)
         state = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
         loss = tf.Variable(0, dtype=tf.float32)
-
         default_prev_d = tf.zeros([self.batch_size, 2], tf.float32)
         default_prev_s = tf.zeros([self.batch_size, 3], tf.float32)
 
