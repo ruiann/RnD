@@ -22,22 +22,23 @@ def get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y):
     p = tf.multiply(p, out_pi)
     result = tf.reduce_sum(p, 1, keep_dims=True)
     result = -tf.log(result)
-    return tf.reduce_mean(result)
+    return result
 
 
-def get_loss_func_s(logits, targets):
+def get_loss_func_s(targets, logits):
     pos_weight = tf.constant([1, 5, 100], tf.float32)
-    return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=targets, logits=logits, pos_weight=pos_weight))
+    return tf.nn.weighted_cross_entropy_with_logits(targets=targets, logits=logits, pos_weight=pos_weight)
 
 
 class RnD:
-    def __init__(self, batch_size=32, k=20, data_type=tf.float32, label=3755, encoder_rnn_size=[100, 500], decoder_rnn_size=[1000]):
+    def __init__(self, batch_size=32, k=30, data_type=tf.float32, label=3755, encoder_rnn_size=[100, 500], decoder_rnn_size=[1000], dim=300):
         self.batch_size = batch_size
         self.data_type = data_type
         self.label = label
         self.k = k
         self.encoder_rnn_size = encoder_rnn_size
         self.decoder_rnn_size = decoder_rnn_size
+        self.dim = dim
 
         self.encoder_variables = []
         self.decoder_variables = []
@@ -82,29 +83,31 @@ class RnD:
     def init_decoder(self, reuse=False):
         stddev = 0.5
         with tf.variable_scope('decoder', reuse=reuse):
-            self.Wd = tf.Variable(tf.random_normal([2, 300], stddev=stddev, dtype=tf.float32), name='Wd')
-            self.bd = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bd')
-            self.Ws = tf.Variable(tf.random_normal([3, 300], stddev=stddev, dtype=tf.float32), name='Ws')
-            self.bs = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bs')
-            self.Wc = tf.Variable(tf.random_normal([500, 300], stddev=stddev, dtype=tf.float32), name='Wc')
-            self.bc = tf.Variable(tf.random_normal([300], stddev=stddev, dtype=tf.float32), name='bc')
+            with tf.variable_scope('coding', reuse=reuse):
+                self.Wd = tf.Variable(tf.random_normal([2, self.dim], stddev=stddev, dtype=tf.float32), name='Wd')
+                self.bd = tf.Variable(tf.random_normal([self.dim], stddev=stddev, dtype=tf.float32), name='bd')
+                self.Ws = tf.Variable(tf.random_normal([3, self.dim], stddev=stddev, dtype=tf.float32), name='Ws')
+                self.bs = tf.Variable(tf.random_normal([self.dim], stddev=stddev, dtype=tf.float32), name='bs')
+                self.Wc = tf.Variable(tf.random_normal([500, self.dim], stddev=stddev, dtype=tf.float32), name='Wc')
+                self.bc = tf.Variable(tf.random_normal([self.dim], stddev=stddev, dtype=tf.float32), name='bc')
 
-            self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
+                self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
 
-            self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32, name='Wst'))
-            self.bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32), name='bst')
+            with tf.variable_scope('output', reuse=reuse):
+                self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32), name='Wst')
+                self.bst = tf.Variable(tf.random_normal([3], stddev=stddev, dtype=tf.float32), name='bst')
 
-            self.Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32), name='Wh')
-            self.bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32), name='bh')
+                self.Wh = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 5 * self.k], stddev=stddev, dtype=tf.float32), name='Wh')
+                self.bh = tf.Variable(tf.random_normal([5 * self.k], stddev=stddev, dtype=tf.float32), name='bh')
 
         self.decoder_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
 
-    def rnn_decode_step(self, code, d, s, state, reuse=False):
+    def rnn_decode_step(self, code, d, s, hidden, reuse=False):
         with tf.variable_scope('decoder', reuse=reuse):
-            x = tf.nn.tanh(tf.matmul(d, self.Wd) + self.bd) + tf.nn.tanh(tf.matmul(s, self.Ws) + self.bs) + tf.nn.tanh(tf.matmul(code, self.Wc) + self.bc)
-            output, state = self.cell(x, state)
+            x = tf.nn.relu(tf.matmul(d, self.Wd) + self.bd) + tf.nn.relu(tf.matmul(s, self.Ws) + self.bs) + tf.nn.relu(tf.matmul(code, self.Wc) + self.bc)
+            output, hidden = self.cell(x, hidden)
 
-            status = tf.matmul(output, self.Wst) + self.bst
+            state = tf.matmul(output, self.Wst) + self.bst
             gmm = tf.nn.tanh(tf.matmul(output, self.Wh) + self.bh)
             out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y = tf.split(gmm, num_or_size_splits=5, axis=1)
 
@@ -112,19 +115,19 @@ class RnD:
             out_pi = tf.subtract(out_pi, max_pi)
             out_pi = tf.exp(out_pi)
             normalize_pi = tf.reciprocal(tf.reduce_sum(out_pi, 1, keep_dims=True))
-            out_pi = tf.multiply(normalize_pi, out_pi)
+            out_pi = tf.multiply(normalize_pi, out_pi, name='gmm_pi')
 
-            out_sigma_x = tf.exp(out_sigma_x)
-            out_sigma_y = tf.exp(out_sigma_y)
+            out_sigma_x = tf.exp(out_sigma_x, name='gmm_sigma_x')
+            out_sigma_y = tf.exp(out_sigma_y, name='gmm_sigma_y')
 
-        return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, state
+        return out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, state, hidden
 
     def train(self, x):
         length = tf.shape(x)[1]
         coding = self.rnn_encode(x, training=False)
 
         i = tf.constant(0)
-        state = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
+        hidden = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
         loss = tf.Variable(0, dtype=tf.float32)
         default_prev_d = tf.zeros([self.batch_size, 2], tf.float32)
         default_prev_s = tf.zeros([self.batch_size, 3], tf.float32)
@@ -132,7 +135,7 @@ class RnD:
         def cond(i, *_):
             return tf.less(i, length)
 
-        def body(i, state, loss):
+        def body(i, hidden, loss):
 
             def init_call():
                 prev_d = default_prev_d
@@ -148,15 +151,15 @@ class RnD:
             d = x[:, i, 0: 2]
             s = x[:, i, 2: 5]
 
-            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, status, out_state = self.rnn_decode_step(coding, prev_d, prev_s, state)
+            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, state, out_hidden = self.rnn_decode_step(coding, prev_d, prev_s, hidden)
             loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
-            loss_s = get_loss_func_s(status, s)
+            loss_s = get_loss_func_s(s, state)
 
-            loss = loss + loss_d + loss_s
+            loss = loss + tf.reduce_mean(loss_d + loss_s, name='frame_loss')
             i = tf.add(i, 1)
-            return i, out_state, loss
+            return i, out_hidden, loss
 
-        _, final_state, final_loss = tf.while_loop(cond=cond, body=body, loop_vars=(i, state, loss))
+        _, final_state, final_loss = tf.while_loop(cond=cond, body=body, loop_vars=(i, hidden, loss))
 
         final_loss = tf.reduce_sum(tf.concat(final_loss, 1))
         tf.summary.scalar('loss', final_loss)
