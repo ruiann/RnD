@@ -128,14 +128,15 @@ class RnD:
 
         i = tf.constant(0)
         hidden = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
-        loss = tf.Variable(0, dtype=tf.float32)
+        d_loss = tf.Variable(0, dtype=tf.float32)
+        s_loss = tf.Variable(0, dtype=tf.float32)
         default_prev_d = tf.zeros([self.batch_size, 2], tf.float32)
         default_prev_s = tf.zeros([self.batch_size, 3], tf.float32)
 
         def cond(i, *_):
             return tf.less(i, length)
 
-        def body(i, hidden, loss):
+        def body(i, hidden, d_loss, s_loss):
 
             def init_call():
                 prev_d = default_prev_d
@@ -155,12 +156,14 @@ class RnD:
             loss_d = get_loss_func_d(d, out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y)
             loss_s = get_loss_func_s(s, state)
 
-            loss = loss + tf.reduce_mean(loss_d + loss_s, name='frame_loss')
+            d_loss = d_loss + tf.reduce_mean(loss_d, name='frame_loss_d')
+            s_loss = s_loss + tf.reduce_mean(loss_s, name='frame_loss_s')
             i = tf.add(i, 1)
-            return i, out_hidden, loss
+            return i, out_hidden, d_loss, s_loss
 
-        _, final_state, final_loss = tf.while_loop(cond=cond, body=body, loop_vars=(i, hidden, loss))
+        _, final_state, final_loss_d, final_loss_s = tf.while_loop(cond=cond, body=body, loop_vars=(i, hidden, d_loss, s_loss))
 
-        final_loss = tf.reduce_sum(tf.concat(final_loss, 1))
-        tf.summary.scalar('loss', final_loss)
+        final_loss = final_loss_d + final_loss_s
+        tf.summary.scalar('loss_d', final_loss_d)
+        tf.summary.scalar('loss_s', final_loss_s)
         return final_loss
