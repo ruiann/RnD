@@ -91,6 +91,9 @@ class RnD:
                 self.Wc = tf.Variable(tf.random_normal([500, self.dim], stddev=stddev, dtype=tf.float32), name='Wc')
                 self.bc = tf.Variable(tf.random_normal([self.dim], stddev=stddev, dtype=tf.float32), name='bc')
 
+                self.Wi = tf.Variable(tf.random_normal([self.dim, self.decoder_rnn_size[-1]], stddev=stddev, dtype=tf.float32), name='Wi')
+                self.bi = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1]], stddev=stddev, dtype=tf.float32), name='bi')
+
                 self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
 
             with tf.variable_scope('output', reuse=reuse):
@@ -105,6 +108,7 @@ class RnD:
     def rnn_decode_step(self, code, d, s, hidden, reuse=False):
         with tf.variable_scope('decoder', reuse=reuse):
             x = tf.nn.relu(tf.matmul(d, self.Wd) + self.bd) + tf.nn.relu(tf.matmul(s, self.Ws) + self.bs) + tf.nn.relu(tf.matmul(code, self.Wc) + self.bc)
+            x = tf.nn.relu(tf.matmul(x, self.Wi) + self.bi)
             output, hidden = self.cell(x, hidden)
 
             state = tf.matmul(output, self.Wst) + self.bst
