@@ -7,6 +7,12 @@ from tensorflow.contrib import rnn
 import math
 
 
+def sample(pi, mu_x, mu_y, name):
+    x = tf.multiply(mu_x, pi)
+    y = tf.multiply(mu_y, pi)
+    return tf.concat([x, y], 1, name=name)
+
+
 def normal(y, mu, sigma):
     result = tf.subtract(y, mu)
     result = tf.multiply(result, tf.reciprocal(sigma))
@@ -42,6 +48,7 @@ class RnD:
 
         self.encoder_variables = []
         self.decoder_variables = []
+        self.init_decoder()
 
     def rnn_encode(self, x, reuse=False, time_major=False, pooling='mean', training=True):
         time_axis = 0 if time_major else 1
@@ -94,7 +101,7 @@ class RnD:
                 self.Wi = tf.Variable(tf.random_normal([self.dim, self.decoder_rnn_size[-1]], stddev=stddev, dtype=tf.float32), name='Wi')
                 self.bi = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1]], stddev=stddev, dtype=tf.float32), name='bi')
 
-                self.cell = rnn.MultiRNNCell([rnn.GRUCell(self.decoder_rnn_size[i]) for i in range(len(self.decoder_rnn_size))])
+                self.cell = rnn.MultiRNNCell([rnn.GRUCell(size) for size in self.decoder_rnn_size])
 
             with tf.variable_scope('output', reuse=reuse):
                 self.Wst = tf.Variable(tf.random_normal([self.decoder_rnn_size[-1], 3], stddev=stddev, dtype=tf.float32), name='Wst')
@@ -131,7 +138,7 @@ class RnD:
         coding = self.rnn_encode(x, training=False)
 
         i = tf.constant(0)
-        hidden = (tf.zeros([self.batch_size, self.decoder_rnn_size[-1]], tf.float32),)
+        hidden = tuple([tf.zeros([self.batch_size, size], tf.float32) for size in self.decoder_rnn_size])
         d_loss = tf.Variable(0, dtype=tf.float32)
         s_loss = tf.Variable(0, dtype=tf.float32)
         default_prev_d = tf.zeros([self.batch_size, 2], tf.float32)
@@ -171,3 +178,32 @@ class RnD:
         tf.summary.scalar('loss_d', final_loss_d)
         tf.summary.scalar('loss_s', final_loss_s)
         return final_loss
+
+    def generate(self, x):
+        coding = self.rnn_encode(x, training=False)
+
+        i = tf.constant(0)
+        hidden = tuple([tf.zeros([self.batch_size, size], tf.float32) for size in self.decoder_rnn_size])
+        output = tf.TensorArray(dtype=tf.float32, size=50, dynamic_size=True, tensor_array_name='output')
+        prev_d = tf.zeros([self.batch_size, 2], tf.float32)
+        prev_s = tf.zeros([self.batch_size, 3], tf.float32)
+
+        def cond(i, prev_d, prev_s, *_):
+            return tf.argmax(prev_s, 1) != 2
+
+        def body(i, prev_d, prev_s, hidden, output):
+            out_pi, out_sigma_x, out_mu_x, out_sigma_y, out_mu_y, state, out_hidden = self.rnn_decode_step(coding,
+                                                                                                           prev_d,
+                                                                                                           prev_s,
+                                                                                                           hidden)
+
+            d = sample(out_pi, out_mu_x, out_mu_y, name='generated_direction')
+            s = tf.one_hot(indices=tf.arg_max(state, dimension=-1), depth=3, dtype=tf.float32, name='generated_state')
+            output.write(i, tf.concat([d, s], axis=-1, name='generation'))
+            i = tf.add(i, 1)
+            return i, d, s, out_hidden, output
+
+        i, final_d, final_s, final_hidden, generation = tf.while_loop(cond=cond, body=body, loop_vars=(i, prev_d, prev_s, hidden, output))
+
+        generation = generation.stack(name='sample')
+        return generation
