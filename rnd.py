@@ -8,8 +8,8 @@ import math
 
 
 def sample(pi, mu_x, mu_y, name):
-    x = tf.multiply(mu_x, pi)
-    y = tf.multiply(mu_y, pi)
+    x = tf.expand_dims(tf.reduce_sum(tf.multiply(mu_x, pi), axis=-1), -1)
+    y = tf.expand_dims(tf.reduce_sum(tf.multiply(mu_y, pi), axis=-1), -1)
     return tf.concat([x, y], 1, name=name)
 
 
@@ -204,6 +204,6 @@ class RnD:
             return i, d, s, out_hidden, output
 
         i, final_d, final_s, final_hidden, generation = tf.while_loop(cond=cond, body=body, loop_vars=(i, prev_d, prev_s, hidden, output))
-
         generation = generation.stack(name='sample')
+
         return generation

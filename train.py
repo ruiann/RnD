@@ -132,6 +132,39 @@ def train_drawer():
         summary_writer.close()
 
 
+def generate():
+    model = RnD(batch_size=batch_size)
+
+    x = tf.placeholder(tf.float32, [batch_size, None, 5], 'x')
+    sample = model.generate(x)
+
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+    with sess.as_default():
+
+        sess.run(tf.global_variables_initializer())
+        r_saver = tf.train.Saver(model.encoder_variables)
+        d_saver = tf.train.Saver(model.decoder_variables)
+        r_ckpt = tf.train.get_checkpoint_state(r_model_dir)
+        d_ckpt = tf.train.get_checkpoint_state(d_model_dir)
+        if r_ckpt:
+            r_saver.restore(sess, r_ckpt.model_checkpoint_path)
+        if d_ckpt:
+            d_saver.restore(sess, d_ckpt.model_checkpoint_path)
+
+        step = 0
+        while step < loop:
+            print('batch: %d' % step)
+            bucket_index, x_batch, _ = feed_dict(batch_size)
+            print('bucket: {}'.format(bucket_index))
+
+            generation = sess.run(sample, feed_dict={
+                x: x_batch
+            })
+            print(generation)
+
+
 if __name__ == '__main__':
     # train_recognizer()
     train_drawer()
+    generate()
